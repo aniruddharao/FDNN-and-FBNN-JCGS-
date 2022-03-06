@@ -1,4 +1,4 @@
-# FDNN-and-FBNN-JCGS-
+# FDNN-and-FBNN-JCGS
 
 
 Code for different simulation settings
