@@ -1,0 +1,448 @@
+library(reshape2)
+library(MASS)
+library(refund)
+library(Metrics)
+library(neuralnet)
+library(sigmoid)
+library(splines2)
+library(rlist)
+####This simulation is for the single index model with continuous response.
+#We average th result over 100 iterations.
+#in this code we get the result for functional basis neural network (FBNN) with only on continuous neuron and early stopping.
+set.seed(735)
+m=200
+n=500
+
+frun=100
+
+
+fdata=list()
+for (i in 1:frun) {
+  x = seq(0,1,len=m)        #gird values
+  
+  cov<-function(t,s,sig2=1,rho=0.5){ # matern ftn nu = 5/2
+    d <- abs(outer(t,s,"-"))
+    tmp2 <- sig2*(1+sqrt(5)*d/rho + 5*d^2/(3*rho^2))*exp(-sqrt(5)*d/rho)}
+  COV = cov(x, x)
+  
+  
+  rdata= mvrnorm(n, rep(0, length=length(x)), COV)
+  
+  
+  #data= mvrnorm(n, rep(0, length=length(x)), COV) #+ .3*mvrnorm(n, rep(0, length=length(x)), .1*diag(length(x))) #error
+  
+  
+  #data1=data.frame(data)
+  
+  
+  #data1=data.frame(data)
+  
+  
+  rdat=data.frame(x=x,t(rdata))
+  rdat=melt(rdat,id='x')
+  #dat= data.frame(x=x, t(data))
+  #dat= melt(dat, id="x")
+  
+  
+  
+  #try <- seq(0, 1, by=1/(M-1))
+  #try1 <- t(as.matrix(bSpline(try,df=5)))
+  
+  #try2 <- t(as.matrix(bSpline(try,df=7)))
+  
+  #e1=as.matrix(rnorm(5))
+  #e2=as.matrix(rnorm(7))
+  
+  #b1=t(e1)%*%try1
+  #b2=t(e2)%*%try2
+  
+  
+  
+  
+  ey=rnorm(n)
+  
+  beta=5*sin(x*2*pi)
+  
+  
+  beta1=5*sin(x*3*pi)
+  beta2=5*sin(x*pi)
+  beta12=(as.matrix(beta1))%*%t(as.matrix(beta2))
+  
+  plot(beta12)
+  
+  xtxs=c()
+  for (j in 1:n) {
+    xtxs[j]=t(as.matrix(rdata[j,]))%*%beta12%*%(as.matrix(rdata[j,]))
+  }
+  
+  
+  t1=rdata%*%beta/m
+  
+  t2=rdata%*%beta1/m
+  
+  
+  
+  #yy=2*(sin(t1))+ey
+  
+  yy=0.5*((t1)^2)+ey
+  
+  ydata=cbind(data,yy)
+  
+  
+  
+  
+  #model using FLM
+  y=yy[1:(n/2)]
+  xt=rdata[1:(n/2),]
+  t00=var(ey[1:(n/2)])
+  
+  yp=yy[(n/2+1):n]
+  xtp=rdata[(n/2+1):n,]
+  t00p=var(ey[(n/2+1):n])
+  
+  fdata[[i]]=list((y),(xt),(yp),(xtp),(t00),(t00p))
+  
+  
+}
+
+
+fdatav=list()
+for (i in 1:frun) {
+  x = seq(0,1,len=m)        #gird values
+  
+  cov<-function(t,s,sig2=1,rho=0.5){ # matern ftn nu = 5/2
+    d <- abs(outer(t,s,"-"))
+    tmp2 <- sig2*(1+sqrt(5)*d/rho + 5*d^2/(3*rho^2))*exp(-sqrt(5)*d/rho)}
+  COV = cov(x, x)
+  
+  
+  rdata= mvrnorm(n/2, rep(0, length=length(x)), COV)
+  
+  
+  #data= mvrnorm(n, rep(0, length=length(x)), COV) #+ .3*mvrnorm(n, rep(0, length=length(x)), .1*diag(length(x))) #error
+  
+  
+  #data1=data.frame(data)
+  
+  
+  rdat=data.frame(x=x,t(rdata))
+  rdat=melt(rdat,id='x')
+  #dat= data.frame(x=x, t(data))
+  #dat= melt(dat, id="x")
+  
+  
+  
+  
+  ey=rnorm(n/2)
+  
+  
+  beta=5*sin(x*2*pi)
+  
+  
+  beta1=5*sin(x*3*pi)
+  beta2=5*sin(x*pi)
+  beta12=(as.matrix(beta1))%*%t(as.matrix(beta2))
+  
+  plot(beta12)
+  
+  xtxs=c()
+  for (j in 1:(n/2)) {
+    xtxs[j]=t(as.matrix(rdata[j,]))%*%beta12%*%(as.matrix(rdata[j,]))
+  }
+  
+  
+  t1=rdata%*%beta/m
+  
+  t2=rdata%*%beta1/m
+  
+  
+  
+  #yy=2*(sin(t1))+ey
+  
+  yy=0.5*((t1)^2)+ey
+  
+  var(yy)
+  t0=var(ey)
+  
+  
+  ydata=cbind(data,yy)
+  
+  
+  
+  #model using FLM
+  yv=yy
+  xv=rdata
+  t00v=var(ey)
+  
+  
+  fdatav[[i]]=list(yv,xv,t00v)
+  
+  
+}
+
+
+
+fbnn.es <- function(X, Y, XV,YV, S, vi, vj, vk, step_size, niteration){
+  xv=XV
+  yv=YV
+  xt=X
+  # get dim of input
+  N <- nrow(xt) # number of examples
+  M <- ncol(xt) # number of timepoints for xt
+  S <- S # number of timepoints on s
+  
+  # initialize parameters randomly
+  
+  vi1 <- seq(0, 1, by=1/(M-1))
+  vi_v <- t(as.matrix(bSpline(vi1,df=vi)))
+  
+  
+  vj1 <- seq(0, 1, by=1/(S-1))
+  vj_v <- t(as.matrix(bSpline(vj1,df=vj)))
+  
+  vk1 <- seq(0, 1, by=1/(S-1))
+  vk_v <- t(as.matrix(bSpline(vk1,df=vk)))
+  
+  
+  
+  
+  # initialize parameters randomly
+  W <- 0.01 * matrix(rnorm(vi*vj), nrow = vi)
+  b <- matrix(0, nrow = N, ncol = S)
+  W2 <- 0.01 * as.vector(rnorm(vk))
+  b2 <- matrix(0, nrow = N, ncol = 1)
+  
+  
+  trainloss=c()
+  testloss=c()
+  
+  Wlist=list()  
+  blist=list()  
+  W2list=list()  
+  b2list=list()
+  yhatlist=list()
+  
+  # gradient descent loop to update weight and bias
+  for (i in 1:niteration){
+    # hidden layer, ReLU activation
+    
+    
+    ai=t(as.matrix(vi_v)%*%t(xt)/M)
+    
+    
+    awv1=ai%*%W
+    awv=awv1%*%vj_v
+    
+    hidden_layer1 <- relu(awv+b)
+    hidden_layer1<- matrix(hidden_layer1, nrow  = N)
+    # class score
+    
+    ak=t(as.matrix(vk_v)%*%t(hidden_layer1)/S)
+    
+    
+    hl2=(ak%*%(as.vector(W2)))
+    
+    hidden_layer2 <- (b2+hl2)
+    hidden_layer2<- matrix(hidden_layer2, nrow  = N)
+    
+    
+    # compute the loss: sofmax and regularization
+    yhat=hidden_layer2
+    data_loss <- sum((Y-yhat)^2)/N
+    loss <- data_loss
+    
+    
+    
+    
+    
+    ##validation set
+    aitest=t(as.matrix(vi_v)%*%t(xv)/M)
+    
+    
+    awv1test=aitest%*%W
+    awvtest=awv1test%*%vj_v
+    
+    hidden_layer1test <- relu(awvtest+b)
+    hidden_layer1test<- matrix(hidden_layer1test, nrow  = N)
+    # class score
+    
+    aktest=t(as.matrix(vk_v)%*%t(hidden_layer1test)/S)
+    
+    
+    hl2test=(aktest%*%(as.vector(W2)))
+    
+    hidden_layer2test <- (b2+hl2test)
+    hidden_layer2test<- matrix(hidden_layer2test, nrow  = N)
+    
+    
+    # compute the loss: sofmax and regularization
+    yhattest=hidden_layer2test
+    data_losstest <- sum((yv-yhattest)^2)/N
+    
+    # check progress
+    if (i%%1000 == 0 | i == niteration){
+      print(paste("iteration", i,': loss', loss))}
+    
+    # compute the gradient on scores
+    dscores= -2*(Y-yhat)/N
+    
+    # backpropate the gradient to the parameters
+    dW2=t(ak)%*%dscores
+    
+    db2=colSums(dscores)
+    
+    ##########################################################################################correct form here    
+    # next backprop into hidden layer
+    
+    dW1.0=as.vector(W2)%*%vk_v
+    dW1.1=dscores%*%dW1.0
+    dW1.2=(as.matrix(relud(hidden_layer1)))
+    dW1.3=dW1.1*dW1.2
+    dW1.4=vj_v%*%t(dW1.3)
+    dW1.5=dW1.4%*%(ai)
+    dW1=t(dW1.5)   
+    
+    db=colSums(dW1.3)
+    
+    # update parameter
+    W <- W-step_size*dW1
+    b <- b[1,]-step_size*db
+    b=matrix(rep(b,N),N,S, byrow = T)
+    W2 <- W2-step_size*dW2
+    b2 <- b2[1]-step_size*db2
+    b2=rep(b2,N)
+    
+    trainloss=c(trainloss,data_loss)
+    testloss=c(testloss,data_losstest)
+    
+    Wlist=list.append(Wlist,W)
+    blist=list.append(blist,b)
+    W2list=list.append(W2list,W2)
+    b2list=list.append(b2list,b2)
+    yhatlist=list.append(yhatlist,yhat)
+    
+  }
+  kk=which.min(testloss)
+  W=Wlist[[kk-1]]
+  b=blist[[kk-1]]
+  W2=W2list[[kk-1]]
+  b2=b2list[[kk-1]]
+  yhat=yhatlist[[kk-1]]
+  loss=trainloss[kk]
+  lossv=testloss[kk]
+  
+  return(list(W, W2, b, b2,sqrt(loss),yhat,trainloss,testloss,which.min(trainloss),which.min(testloss),kk,sqrt(lossv)))
+}
+
+fbnn.pred <- function(X, S, vi, vj, vk, para = list()){
+  W <- para[[1]]
+  
+  W2 <- para[[2]]
+  b <- para[[3]]
+  
+  b2 <- para[[4]]
+  
+  xt=X
+  N <- nrow(X)
+  M <- ncol(xt) # number of timepoints for xt
+  
+  vi1 <- seq(0, 1, by=1/(M-1))
+  vi_v <- t(as.matrix(bSpline(vi1,df=vi)))
+  
+  
+  vj1 <- seq(0, 1, by=1/(S-1))
+  vj_v <- t(as.matrix(bSpline(vj1,df=vj)))
+  
+  vk1 <- seq(0, 1, by=1/(S-1))
+  vk_v <- t(as.matrix(bSpline(vk1,df=vk)))
+  
+  ai=t(as.matrix(vi_v)%*%t(xt)/M)
+  
+  
+  awv1=ai%*%W
+  awv=awv1%*%vj_v
+  
+  hidden_layer1 <- relu(awv+b)
+  hidden_layer1<- matrix(hidden_layer1, nrow  = N)
+  # class score
+  
+  ak=t(as.matrix(vk_v)%*%t(hidden_layer1)/S)
+  
+  
+  hl2=(ak%*%(as.vector(W2)))
+  
+  hidden_layer2 <- (b2+hl2)
+  hidden_layer2<- matrix(hidden_layer2, nrow  = N)
+  
+  
+  # compute the loss: sofmax and regularization
+  yhat=hidden_layer2
+  
+  return(yhat)  
+}
+
+
+
+relud=function(aa){
+  aa[which(aa>0)]=1
+  aa[which(aa<0)]=0
+  
+  return(aa)
+}
+
+
+
+
+fnnit=function(y,xt,yp,xtp,xv,yv,S,vi,vj,vk,step_size,niteration){
+  
+  Y=y
+  
+  
+  
+  
+  
+  fbnn.model <- fbnn.es(X=xt, Y=Y, XV=xv,YV=yv, S=S, vi=vi, vj=vj, vk=vk, step_size =step_size, niteration = niteration)
+  
+  
+  
+  t4_i2=(fbnn.model[[5]])
+  t4_i2
+  
+  
+  
+  
+  
+  fbnn.pred.model <- fbnn.pred(X=xtp, S=S, vi=vi, vj=vj, vk=vk, fbnn.model)
+  t4p_i2=rmse(as.numeric(yp),as.numeric(fbnn.pred.model))
+  t4_i2
+  t4p_i2
+  
+  
+  t4_i2v=(fbnn.model[[12]])
+  t4_i2v
+  
+  
+  
+  rr=as.matrix(c(t4_i2,t4p_i2,t4_i2v))
+  
+  return(rr)
+  
+}
+
+
+
+fnnrun=frun
+finalresm=matrix(c(1,2,3,4,5,6),nrow=6)
+for (i in 1:fnnrun){
+  runs=fnnit(y=fdata[[i]][[1]],xt=fdata[[i]][[2]],yp=fdata[[i]][[3]],xtp=fdata[[i]][[4]],
+             yv=fdatav[[i]][[1]],xv=fdatav[[i]][[2]],S=30,vi=5,vj=6,vk=7,step_size=.1,niteration=100000)
+  runs=rbind(runs,fdata[[i]][[5]],fdata[[i]][[6]],fdatav[[i]][[3]])
+  finalresm=cbind(finalresm,runs)
+  
+}
+#The first two values below give the training error and the testing error. 3rd and 4th value is the noise being added to the data.
+
+
+finalresm=finalresm[,-1]
+
+rowMeans(finalresm)
