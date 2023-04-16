@@ -25,7 +25,7 @@ library(rlist)
 
 
 
-#defining relu activiation function
+#defining derivative of relu activiation function
 relud=function(aa){
   aa[which(aa>0)]=1
   aa[which(aa<0)]=0
